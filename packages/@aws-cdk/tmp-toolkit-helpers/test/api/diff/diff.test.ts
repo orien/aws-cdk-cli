@@ -236,7 +236,7 @@ describe('formatSecurityDiff', () => {
     });
 
     // THEN
-    expect(result).toEqual({});
+    expect(result.formattedDiff).toBeUndefined();
     expect(mockIoDefaultMessages.warning).not.toHaveBeenCalled();
   });
 
@@ -320,7 +320,7 @@ describe('formatSecurityDiff', () => {
     });
 
     // THEN
-    expect(result).toEqual({});
+    expect(result.formattedDiff).toBeUndefined();
     expect(mockIoDefaultMessages.warning).not.toHaveBeenCalled();
   });
 });
