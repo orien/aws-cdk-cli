@@ -426,7 +426,7 @@ export async function exec(args: string[], synthesizer?: Synthesizer): Promise<n
 
       case 'watch':
         ioHost.currentAction = 'watch';
-        return cli.watch({
+        await cli.watch({
           selector,
           exclusively: args.exclusively,
           toolkitStackName,
@@ -443,6 +443,7 @@ export async function exec(args: string[], synthesizer?: Synthesizer): Promise<n
           traceLogs: args.logs,
           concurrency: args.concurrency,
         });
+        return;
 
       case 'destroy':
         ioHost.currentAction = 'destroy';
