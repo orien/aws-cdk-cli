@@ -272,6 +272,7 @@ export async function exec(args: string[], synthesizer?: Synthesizer): Promise<n
         return cli.refactor({
           dryRun: args.dryRun,
           selector,
+          excludeFile: args.excludeFile,
         });
 
       case 'bootstrap':
