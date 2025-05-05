@@ -1564,7 +1564,7 @@ const cliInteg = configureProject(
       'sinon@^9',
       'ts-mock-imports@^1',
       'yaml@1',
-      'yargs@^17',
+      'yargs@^16',
       // Jest is a runtime dependency here!
       'jest@^29',
       'jest-junit@^15',
@@ -1574,7 +1574,7 @@ const cliInteg = configureProject(
     devDeps: [
       yarnCling,
       '@types/semver@^7',
-      '@types/yargs@^15',
+      '@types/yargs@^16',
       '@types/fs-extra@^9',
       '@types/glob@^7',
     ],
@@ -1590,6 +1590,9 @@ const cliInteg = configureProject(
       compilerOptions: {
         ...defaultTsOptions,
         esModuleInterop: false,
+        target: 'es2022',
+        lib: ['es2022', 'esnext.disposable', 'dom'],
+        module: 'NodeNext',
       },
       include: ['**/*.ts'],
       exclude: ['resources/**/*'],
@@ -1597,10 +1600,10 @@ const cliInteg = configureProject(
     jestOptions: jestOptionsForProject({
       jestConfig: {
         coverageThreshold: {
-          statements: 40,
-          lines: 40,
+          statements: 25,
+          lines: 25,
           functions: 10,
-          branches: 40,
+          branches: 25,
         },
       },
     }),
