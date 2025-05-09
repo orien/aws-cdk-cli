@@ -488,7 +488,7 @@ export interface IECSClient {
   registerTaskDefinition(input: RegisterTaskDefinitionCommandInput): Promise<RegisterTaskDefinitionCommandOutput>;
   updateService(input: UpdateServiceCommandInput): Promise<UpdateServiceCommandOutput>;
   // Waiters
-  waitUntilServicesStable(input: DescribeServicesCommandInput): Promise<WaiterResult>;
+  waitUntilServicesStable(input: DescribeServicesCommandInput, timeoutSeconds?: number): Promise<WaiterResult>;
 }
 
 export interface IElasticLoadBalancingV2Client {
@@ -827,11 +827,11 @@ export class SDK {
       updateService: (input: UpdateServiceCommandInput): Promise<UpdateServiceCommandOutput> =>
         client.send(new UpdateServiceCommand(input)),
       // Waiters
-      waitUntilServicesStable: (input: DescribeServicesCommandInput): Promise<WaiterResult> => {
+      waitUntilServicesStable: (input: DescribeServicesCommandInput, timeoutSeconds?: number): Promise<WaiterResult> => {
         return waitUntilServicesStable(
           {
             client,
-            maxWaitTime: 600,
+            maxWaitTime: timeoutSeconds ?? 600,
             minDelay: 6,
             maxDelay: 6,
           },
