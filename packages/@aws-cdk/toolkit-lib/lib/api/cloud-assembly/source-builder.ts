@@ -3,9 +3,8 @@ import { format } from 'util';
 import type * as cxschema from '@aws-cdk/cloud-assembly-schema';
 import * as cxapi from '@aws-cdk/cx-api';
 import * as fs from 'fs-extra';
-import { Context } from '../context';
+import { CdkAppMultiContext, MemoryContext, type IContextStore } from './context-store';
 import { RWLock } from '../rwlock';
-import { Settings } from '../settings';
 import type { ContextAwareCloudAssemblyProps } from './private/context-aware-source';
 import { ContextAwareCloudAssemblySource } from './private/context-aware-source';
 import { execInChildProcess } from './private/exec';
@@ -85,15 +84,14 @@ export interface AssemblySourceProps {
   readonly lookups?: boolean;
 
   /**
-   * Context values for the application.
+   * A context store for this operation
    *
-   * Context can be read in the app from any construct using `node.getContext(key)`.
+   * The context store will be used to source initial context values,
+   * and updated values will be stored here.
    *
-   * @default - no context
+   * @default - depend on the operation
    */
-  readonly context?: {
-    [key: string]: any;
-  };
+  readonly contextStore?: IContextStore;
 
   /**
    * Options that are passed through the context to a CDK app on synth
@@ -278,6 +276,8 @@ export abstract class CloudAssemblySourceBuilder {
   /**
    * Create a Cloud Assembly from a Cloud Assembly builder function.
    *
+   * ## Outdir
+   *
    * If no output directory is given, it will synthesize into a temporary system
    * directory. The temporary directory will be cleaned up, unless
    * `disposeOutdir: false`.
@@ -288,6 +288,12 @@ export abstract class CloudAssemblySourceBuilder {
    * directory. This means that while the CloudAssembly is being used, no CDK
    * app synthesis can take place into that directory.
    *
+   * ## Context
+   *
+   * If no `contextStore` is given, a `MemoryContext` will be used. This means
+   * no provider lookups will be persisted anywhere by default. Use a different
+   * type of context store if you want persistence between synth operations.
+   *
    * @param builder - the builder function
    * @param props - additional configuration properties
    * @returns the CloudAssembly source
@@ -297,10 +303,10 @@ export abstract class CloudAssemblySourceBuilder {
     props: FromAssemblyBuilderOptions = {},
   ): Promise<ICloudAssemblySource> {
     const services = await this.sourceBuilderServices();
-    const context = new Context({ bag: new Settings(props.context ?? {}) });
+    const contextStore = props.contextStore ?? new MemoryContext();
     const contextAssemblyProps: ContextAwareCloudAssemblyProps = {
       services,
-      context,
+      contextStore,
       lookups: props.lookups,
     };
 
@@ -314,7 +320,7 @@ export abstract class CloudAssemblySourceBuilder {
           const synthParams = parametersFromSynthOptions(props.synthOptions);
 
           const fullContext = {
-            ...context.all,
+            ...await contextStore.read(),
             ...synthParams.context,
           };
 
@@ -375,7 +381,7 @@ export abstract class CloudAssemblySourceBuilder {
     const services: ToolkitServices = await this.sourceBuilderServices();
     const contextAssemblyProps: ContextAwareCloudAssemblyProps = {
       services,
-      context: new Context(), // @todo there is probably a difference between contextaware and contextlookup sources
+      contextStore: new MemoryContext(), // @todo We shouldn't be using a `ContextAwareCloudAssemblySource` at all.
       lookups: false,
     };
 
@@ -401,7 +407,10 @@ export abstract class CloudAssemblySourceBuilder {
   /**
    * Use a directory containing an AWS CDK app as source.
    *
-   * The subprocess will execute in `workingDirectory`.
+   * The subprocess will execute in `workingDirectory`, which defaults to
+   * the current process' working directory if not given.
+   *
+   * ## Outdir
    *
    * If an output directory is supplied, relative paths are evaluated with
    * respect to the current process' working directory. If an output directory
@@ -415,21 +424,28 @@ export abstract class CloudAssemblySourceBuilder {
    * directory.  This means that while the CloudAssembly is being used, no CDK
    * app synthesis can take place into that directory.
    *
+   * ## Context
+   *
+   * If no `contextStore` is given, a `CdkAppMultiContext` will be used, initialized
+   * to the app's `workingDirectory`. This means that context will be loaded from
+   * all the CDK's default context sources, and updates will be written to
+   * `cdk.context.json`.
+   *
    * @param props - additional configuration properties
    * @returns the CloudAssembly source
    */
   public async fromCdkApp(app: string, props: FromCdkAppOptions = {}): Promise<ICloudAssemblySource> {
     const services: ToolkitServices = await this.sourceBuilderServices();
-    // @todo this definitely needs to read files from the CWD
-    const context = new Context({ bag: new Settings(props.context ?? {}) });
-    const contextAssemblyProps: ContextAwareCloudAssemblyProps = {
-      services,
-      context,
-      lookups: props.lookups,
-    };
-
     const workingDirectory = props.workingDirectory ?? process.cwd();
     const outdir = props.outdir ? path.resolve(props.outdir) : path.resolve(workingDirectory, 'cdk.out');
+
+    const contextStore = props.contextStore ?? new CdkAppMultiContext(workingDirectory);
+
+    const contextAssemblyProps: ContextAwareCloudAssemblyProps = {
+      services,
+      contextStore,
+      lookups: props.lookups,
+    };
 
     return new ContextAwareCloudAssemblySource(
       {
@@ -453,7 +469,7 @@ export abstract class CloudAssemblySourceBuilder {
           const synthParams = parametersFromSynthOptions(props.synthOptions);
 
           const fullContext = {
-            ...context.all,
+            ...await contextStore.read(),
             ...synthParams.context,
           };
 
