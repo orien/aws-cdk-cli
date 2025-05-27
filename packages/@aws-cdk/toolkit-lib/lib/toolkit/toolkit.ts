@@ -26,6 +26,7 @@ import {
 import { type DestroyOptions } from '../actions/destroy';
 import type { DiffOptions } from '../actions/diff';
 import { appendObject, prepareDiff } from '../actions/diff/private';
+import type { DriftOptions, DriftResult } from '../actions/drift';
 import { type ListOptions } from '../actions/list';
 import type { MappingGroup, RefactorOptions } from '../actions/refactor';
 import { type RollbackOptions } from '../actions/rollback';
@@ -45,11 +46,13 @@ import { CloudAssemblySourceBuilder } from '../api/cloud-assembly/source-builder
 import type { StackCollection } from '../api/cloud-assembly/stack-collection';
 import { Deployments } from '../api/deployments';
 import { DiffFormatter } from '../api/diff';
+import { detectStackDrift } from '../api/drift';
+import { DriftFormatter } from '../api/drift/drift-formatter';
 import type { IIoHost, IoMessageLevel, ToolkitAction } from '../api/io';
 import type { IoHelper } from '../api/io/private';
 import { asIoHelper, IO, SPAN, withoutColor, withoutEmojis, withTrimmedWhitespace } from '../api/io/private';
 import { CloudWatchLogEventMonitor, findCloudWatchLogGroups } from '../api/logs-monitor';
-import { PluginHost } from '../api/plugin';
+import { Mode, PluginHost } from '../api/plugin';
 import {
   AmbiguityError,
   ambiguousMovements,
@@ -374,6 +377,79 @@ export class Toolkit extends CloudAssemblySourceBuilder {
     });
 
     return templateDiffs;
+  }
+
+  /**
+   * Drift Action
+   */
+  public async drift(cx: ICloudAssemblySource, options: DriftOptions): Promise<{ [name: string]: DriftResult }> {
+    const ioHelper = asIoHelper(this.ioHost, 'drift');
+    const sdkProvider = await this.sdkProvider('drift');
+    const selectStacks = options.stacks ?? ALL_STACKS;
+    await using assembly = await assemblyFromSource(ioHelper, cx);
+    const stacks = await assembly.selectStacksV2(selectStacks);
+
+    const allDriftResults: { [name: string]: DriftResult } = {};
+    const unavailableDrifts = [];
+
+    for (const stack of stacks.stackArtifacts) {
+      const cfn = (await sdkProvider.forEnvironment(stack.environment, Mode.ForReading)).sdk.cloudFormation();
+      const driftResults = await detectStackDrift(cfn, ioHelper, stack.stackName);
+
+      if (!driftResults.StackResourceDrifts) {
+        const stackName = stack.displayName ?? stack.stackName;
+        unavailableDrifts.push(stackName);
+        await ioHelper.notify(IO.CDK_TOOLKIT_I4591.msg(`${stackName}: No drift results available`, { stack }));
+        continue;
+      }
+
+      const formatter = new DriftFormatter({ stack, resourceDrifts: driftResults.StackResourceDrifts });
+      const driftOutput = formatter.formatStackDrift();
+      const stackDrift = {
+        numResourcesWithDrift: driftOutput.numResourcesWithDrift,
+        numResourcesUnchecked: driftOutput.numResourcesUnchecked,
+        formattedDrift: {
+          unchanged: driftOutput.unchanged,
+          unchecked: driftOutput.unchecked,
+          modified: driftOutput.modified,
+          deleted: driftOutput.deleted,
+        },
+      };
+      allDriftResults[formatter.stackName] = stackDrift;
+
+      // header
+      await ioHelper.defaults.info(driftOutput.stackHeader);
+
+      // print the different sections at different levels
+      if (driftOutput.unchanged) {
+        await ioHelper.defaults.debug(driftOutput.unchanged);
+      }
+      if (driftOutput.unchecked) {
+        await ioHelper.defaults.debug(driftOutput.unchecked);
+      }
+      if (driftOutput.modified) {
+        await ioHelper.defaults.info(driftOutput.modified);
+      }
+      if (driftOutput.deleted) {
+        await ioHelper.defaults.info(driftOutput.deleted);
+      }
+
+      // main stack result
+      await ioHelper.notify(IO.CDK_TOOLKIT_I4590.msg(driftOutput.summary, {
+        stack,
+        drift: stackDrift,
+      }));
+    }
+
+    // print summary
+    const totalDrifts = Object.values(allDriftResults).reduce((total, current) => total + (current.numResourcesWithDrift ?? 0), 0);
+    const totalUnchecked = Object.values(allDriftResults).reduce((total, current) => total + (current.numResourcesUnchecked ?? 0), 0);
+    await ioHelper.defaults.result(`\n✨  Number of resources with drift: ${totalDrifts}${totalUnchecked ? ` (${totalUnchecked} unchecked)` : ''}`);
+    if (unavailableDrifts.length) {
+      await ioHelper.defaults.warn(`\n⚠️  Failed to check drift for ${unavailableDrifts.length} stack(s). Check log for more details.`);
+    }
+
+    return allDriftResults;
   }
 
   /**
