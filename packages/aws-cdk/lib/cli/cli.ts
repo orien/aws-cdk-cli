@@ -473,9 +473,10 @@ export async function exec(args: string[], synthesizer?: Synthesizer): Promise<n
         ioHost.currentAction = 'init';
         const language = configuration.settings.get(['language']);
         if (args.list) {
-          return printAvailableTemplates(language);
+          return printAvailableTemplates(ioHelper, language);
         } else {
           return cliInit({
+            ioHelper,
             type: args.TEMPLATE,
             language,
             canUseNetwork: undefined,
