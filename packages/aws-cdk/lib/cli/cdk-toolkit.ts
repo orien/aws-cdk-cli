@@ -750,7 +750,7 @@ export class CdkToolkit {
     if (!watchSettings) {
       throw new ToolkitError(
         "Cannot use the 'watch' command without specifying at least one directory to monitor. " +
-          'Make sure to add a "watch" key to your cdk.json',
+        'Make sure to add a "watch" key to your cdk.json',
       );
     }
 
@@ -835,7 +835,7 @@ export class CdkToolkit {
           latch = 'queued';
           await this.ioHost.asIoHelper().defaults.info(
             "Detected change to '%s' (type: %s) while 'cdk deploy' is still running. " +
-              'Will queue for another deployment after this one finishes',
+            'Will queue for another deployment after this one finishes',
             filePath,
             event,
           );
@@ -914,10 +914,10 @@ export class CdkToolkit {
     // Notify user of next steps
     await this.ioHost.asIoHelper().defaults.info(
       `Import operation complete. We recommend you run a ${chalk.blueBright('drift detection')} operation ` +
-        'to confirm your CDK app resource definitions are up-to-date. Read more here: ' +
-        chalk.underline.blueBright(
-          'https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/detect-drift-stack.html',
-        ),
+      'to confirm your CDK app resource definitions are up-to-date. Read more here: ' +
+      chalk.underline.blueBright(
+        'https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/detect-drift-stack.html',
+      ),
     );
     if (actualImport.importResources.length < additions.length) {
       await this.ioHost.asIoHelper().defaults.info('');
@@ -2022,10 +2022,10 @@ export interface DriftOptions {
 
 function buildParameterMap(
   parameters:
-  | {
-    [name: string]: string | undefined;
-  }
-  | undefined,
+    | {
+      [name: string]: string | undefined;
+    }
+    | undefined,
 ): { [name: string]: { [name: string]: string | undefined } } {
   const parameterMap: {
     [name: string]: { [name: string]: string | undefined };
@@ -2109,5 +2109,5 @@ function stackMetadataLogger(ioHelper: IoHelper, verbose?: boolean): (level: 'in
  */
 function requiresApproval(requireApproval: RequireApproval, permissionChangeType: PermissionChangeType) {
   return requireApproval === RequireApproval.ANYCHANGE ||
-  requireApproval === RequireApproval.BROADENING && permissionChangeType === PermissionChangeType.BROADENING;
+    requireApproval === RequireApproval.BROADENING && permissionChangeType === PermissionChangeType.BROADENING;
 }
