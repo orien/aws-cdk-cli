@@ -13,11 +13,12 @@ import { equalSets } from '../../util/sets';
  */
 type ResourceMove = [ResourceLocation[], ResourceLocation[]];
 
-export interface RefactorManagerOptions {
+export interface RefactoringContextOptions {
   environment: Environment;
   localStacks: CloudFormationStack[];
   deployedStacks: CloudFormationStack[];
   overrides?: ResourceMapping[];
+  ignoreModifications?: boolean;
 }
 
 /**
@@ -28,9 +29,9 @@ export class RefactoringContext {
   private readonly ambiguousMoves: ResourceMove[] = [];
   public readonly environment: Environment;
 
-  constructor(props: RefactorManagerOptions) {
+  constructor(props: RefactoringContextOptions) {
     this.environment = props.environment;
-    const moves = resourceMoves(props.deployedStacks, props.localStacks, 'direct');
+    const moves = resourceMoves(props.deployedStacks, props.localStacks, 'direct', props.ignoreModifications);
     const additionalOverrides = structuralOverrides(props.deployedStacks, props.localStacks);
     const overrides = (props.overrides ?? []).concat(additionalOverrides);
     const [nonAmbiguousMoves, ambiguousMoves] = partitionByAmbiguity(overrides, moves);
@@ -70,20 +71,28 @@ export class RefactoringContext {
  *
  */
 function structuralOverrides(deployedStacks: CloudFormationStack[], localStacks: CloudFormationStack[]): ResourceMapping[] {
-  const moves = resourceMoves(deployedStacks, localStacks, 'opposite');
+  const moves = resourceMoves(deployedStacks, localStacks, 'opposite', true);
   const [nonAmbiguousMoves] = partitionByAmbiguity([], moves);
   return resourceMappings(nonAmbiguousMoves);
 }
 
-function resourceMoves(before: CloudFormationStack[], after: CloudFormationStack[], direction: GraphDirection): ResourceMove[] {
+function resourceMoves(
+  before: CloudFormationStack[],
+  after: CloudFormationStack[],
+  direction: GraphDirection = 'direct',
+  ignoreModifications: boolean = false): ResourceMove[] {
   const digestsBefore = resourceDigests(before, direction);
   const digestsAfter = resourceDigests(after, direction);
 
-  const stackNames = (stacks: CloudFormationStack[]) => stacks.map((s) => s.stackName).sort().join(', ');
-  if (!isomorphic(digestsBefore, digestsAfter)) {
+  const stackNames = (stacks: CloudFormationStack[]) =>
+    stacks
+      .map((s) => s.stackName)
+      .sort()
+      .join(', ');
+  if (!(ignoreModifications || isomorphic(digestsBefore, digestsAfter))) {
     const message = [
       'A refactor operation cannot add, remove or update resources. Only resource moves and renames are allowed. ',
-      'Run \'cdk diff\' to compare the local templates to the deployed stacks.\n',
+      "Run 'cdk diff' to compare the local templates to the deployed stacks.\n",
       `Deployed stacks: ${stackNames(before)}`,
       `Local stacks: ${stackNames(after)}`,
     ];
