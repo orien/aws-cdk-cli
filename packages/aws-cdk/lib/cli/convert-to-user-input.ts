@@ -284,6 +284,7 @@ export function convertYargsToUserInput(args: any): UserInput {
       commandOptions = {
         enable: args.enable,
         disable: args.disable,
+        status: args.status,
       };
       break;
   }
@@ -488,6 +489,7 @@ export function convertConfigToUserInput(config: any): UserInput {
   const cliTelemetryOptions = {
     enable: config.cliTelemetry?.enable,
     disable: config.cliTelemetry?.disable,
+    status: config.cliTelemetry?.status,
   };
   const userInput: UserInput = {
     globalOptions,
