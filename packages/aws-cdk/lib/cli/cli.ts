@@ -31,6 +31,8 @@ import { getMigrateScanType } from '../commands/migrate';
 import { execProgram, CloudExecutable } from '../cxapp';
 import type { StackSelector, Synthesizer } from '../cxapp';
 import { ProxyAgentProvider } from './proxy-agent';
+import { cdkCliErrorName } from './telemetry/error';
+import type { ErrorDetails } from './telemetry/schema';
 import { isDeveloperBuildVersion, versionWithBuild, versionNumber } from './version';
 
 if (!process.stdout.isTTY) {
@@ -97,6 +99,12 @@ export async function exec(args: string[], synthesizer?: Synthesizer): Promise<n
     caBundlePath: configuration.settings.get(['caBundlePath']),
   });
 
+  try {
+    await ioHost.startTelemetry(argv, configuration.context);
+  } catch (e: any) {
+    await ioHost.asIoHelper().defaults.trace(`Telemetry instantiation failed: ${e.message}`);
+  }
+
   const shouldDisplayNotices = configuration.settings.get(['notices']);
   // Notices either go to stderr, or nowhere
   ioHost.noticesDestination = shouldDisplayNotices ? 'stderr' : 'drop';
@@ -124,6 +132,12 @@ export async function exec(args: string[], synthesizer?: Synthesizer): Promise<n
     logger: new IoHostSdkLogger(asIoHelper(ioHost, ioHost.currentAction as any)),
     pluginHost: GLOBAL_PLUGIN_HOST,
   }, configuration.settings.get(['profile']));
+
+  try {
+    await ioHost.telemetry?.attachRegion(sdkProvider.defaultRegion);
+  } catch (e: any) {
+    await ioHost.asIoHelper().defaults.trace(`Telemetry attach region failed: ${e.message}`);
+  }
 
   let outDirLock: IReadLock | undefined;
   const cloudExecutable = new CloudExecutable({
@@ -193,6 +207,10 @@ export async function exec(args: string[], synthesizer?: Synthesizer): Promise<n
 
     if (args.all && args.STACKS) {
       throw new ToolkitError('You must either specify a list of Stacks or the `--all` argument');
+    }
+
+    if (args['telemetry-file'] && !configuration.settings.get(['unstable']).includes('telemetry')) {
+      throw new ToolkitError('Unstable feature use: \'telemetry-file\' is unstable. It must be opted in via \'--unstable\', e.g. \'cdk deploy --unstable=telemetry --telemetry-file=my/file/path\'');
     }
 
     args.STACKS = args.STACKS ?? (args.STACK ? [args.STACK] : []);
@@ -648,17 +666,28 @@ function determineHotswapMode(hotswap?: boolean, hotswapFallback?: boolean, watc
 
 /* c8 ignore start */ // we never call this in unit tests
 export function cli(args: string[] = process.argv.slice(2)) {
+  let error: ErrorDetails | undefined;
   exec(args)
     .then(async (value) => {
       if (typeof value === 'number') {
         process.exitCode = value;
       }
     })
-    .catch((err) => {
+    .catch(async (err) => {
       // Log the stack trace if we're on a developer workstation. Otherwise this will be into a minified
       // file and the printed code line and stack trace are huge and useless.
       prettyPrintError(err, isDeveloperBuildVersion());
+      error = {
+        name: cdkCliErrorName(err.name),
+      };
       process.exitCode = 1;
+    })
+    .finally(async () => {
+      try {
+        await CliIoHost.get()?.telemetry?.end(error);
+      } catch (e: any) {
+        await CliIoHost.get()?.asIoHelper().defaults.trace(`Ending Telemetry failed: ${e.message}`);
+      }
     });
 }
 /* c8 ignore stop */
