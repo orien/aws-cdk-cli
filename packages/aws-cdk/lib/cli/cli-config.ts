@@ -115,6 +115,15 @@ export async function makeConfig(): Promise<CliConfig> {
       },
       'flags': {
         description: 'View and toggle feature flags.',
+        arg: {
+          name: 'FLAGNAME',
+          variadic: true,
+        },
+        options: {
+          value: { type: 'string', desc: 'The value the user would like to set the feature flag configuration to', requiresArg: true },
+          set: { type: 'boolean', desc: 'Signifies the user would like to modify their feature flag configuration', requiresArg: false },
+          all: { type: 'boolean', desc: 'Modify or view all feature flags', requiresArg: false },
+        },
       },
       'deploy': {
         description: 'Deploys the stack(s) named STACKS into your AWS account',
