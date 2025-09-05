@@ -338,6 +338,8 @@ export async function exec(args: string[], synthesizer?: Synthesizer): Promise<n
           revert: args.revert,
           stacks: selector,
           additionalStackNames: arrayFromYargs(args.additionalStackName ?? []),
+          force: args.force ?? false,
+          roleArn: args.roleArn,
         });
 
       case 'bootstrap':
