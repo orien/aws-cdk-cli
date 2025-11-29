@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
+import { TELEMETRY_ENDPOINT } from './constants';
 import { integTest, withDefaultFixture } from '../../lib';
 
 jest.setTimeout(2 * 60 * 60_000); // Includes the time to acquire locks, worst-case single-threaded runtime
@@ -12,10 +13,15 @@ integTest(
       allowErrExit: true,
       modEnv: {
         INTEG_STACK_SET: 'stage-with-errors',
+        TELEMETRY_ENDPOINT: TELEMETRY_ENDPOINT,
       },
+      verboseLevel: 3, // trace mode
     });
 
     expect(output).toContain('This is an error');
+
+    // Check the trace that telemetry was executed successfully despite error in synth
+    expect(output).toContain('Telemetry Sent Successfully');
 
     const json = fs.readJSONSync(telemetryFile);
     expect(json).toEqual([
@@ -23,8 +29,7 @@ integTest(
         event: expect.objectContaining({
           command: expect.objectContaining({
             path: ['synth'],
-            parameters: {
-              verbose: 1,
+            parameters: expect.objectContaining({
               unstable: '<redacted>',
               ['telemetry-file']: '<redacted>',
               lookups: true,
@@ -37,7 +42,7 @@ integTest(
               validation: true,
               quiet: false,
               yes: false,
-            },
+            }),
             config: {
               context: {},
             },
@@ -72,8 +77,7 @@ integTest(
         event: expect.objectContaining({
           command: expect.objectContaining({
             path: ['synth'],
-            parameters: {
-              verbose: 1,
+            parameters: expect.objectContaining({
               unstable: '<redacted>',
               ['telemetry-file']: '<redacted>',
               lookups: true,
@@ -86,7 +90,7 @@ integTest(
               validation: true,
               quiet: false,
               yes: false,
-            },
+            }),
             config: {
               context: {},
             },
