@@ -213,6 +213,7 @@ export async function makeConfig(): Promise<CliConfig> {
           'asset-build-concurrency': { type: 'number', desc: 'Maximum number of asset builds to run in parallel', default: 1, requiresArg: true },
           'asset-prebuild': { type: 'boolean', desc: 'Whether to build all assets before deploying the first stack (useful for failing Docker builds)', default: true },
           'ignore-no-stacks': { type: 'boolean', desc: 'Whether to deploy if the app contains no stacks', default: false },
+          'revert-drift': { type: 'boolean', desc: 'Create a drift-aware change set that brings actual resource states in line with template definitions', default: false },
         },
         arg: {
           name: 'STACKS',
