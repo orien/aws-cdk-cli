@@ -214,6 +214,7 @@ export function convertYargsToUserInput(args: any): UserInput {
         processed: args.processed,
         quiet: args.quiet,
         changeSet: args.changeSet,
+        method: args.method,
         importExistingResources: args.importExistingResources,
         includeMoves: args.includeMoves,
         STACKS: args.STACKS,
@@ -485,6 +486,7 @@ export function convertConfigToUserInput(config: any): UserInput {
     processed: config.diff?.processed,
     quiet: config.diff?.quiet,
     changeSet: config.diff?.changeSet,
+    method: config.diff?.method,
     importExistingResources: config.diff?.importExistingResources,
     includeMoves: config.diff?.includeMoves,
   };
