@@ -65,6 +65,7 @@ import type { ICloudAssemblySource, StackSelector } from '../api/cloud-assembly'
 import { CachedCloudAssembly, StackSelectionStrategy } from '../api/cloud-assembly';
 import type { StackAssembly } from '../api/cloud-assembly/private';
 import { ALL_STACKS } from '../api/cloud-assembly/private';
+import { AsyncDisposableBox } from '../api/cloud-assembly/private/disposable-box';
 import { CloudAssemblySourceBuilder } from '../api/cloud-assembly/source-builder';
 import type { StackCollection } from '../api/cloud-assembly/stack-collection';
 import { Deployments } from '../api/deployments';
@@ -320,11 +321,9 @@ export class Toolkit extends CloudAssemblySourceBuilder {
   public async synth(cx: ICloudAssemblySource, options: SynthOptions = {}): Promise<CachedCloudAssembly> {
     const ioHelper = asIoHelper(this.ioHost, 'synth');
 
-    // NOTE: NOT 'await using' because we return ownership to the caller
-    const assembly = await synthAndMeasure(ioHelper, cx, stacksOpt(options));
-
-    const stacks = await assembly.selectStacksV2(stacksOpt(options));
-    const autoValidateStacks = options.validateStacks ? [assembly.selectStacksForValidation()] : [];
+    await using assembly = new AsyncDisposableBox(await synthAndMeasure(ioHelper, cx, stacksOpt(options)));
+    const stacks = await assembly.value.selectStacksV2(stacksOpt(options));
+    const autoValidateStacks = options.validateStacks ? [assembly.value.selectStacksForValidation()] : [];
     await this.validateStacksMetadata(stacks.concat(...autoValidateStacks), ioHelper);
 
     // if we have a single stack, print it to STDOUT
@@ -355,7 +354,7 @@ export class Toolkit extends CloudAssemblySourceBuilder {
       await ioHelper.defaults.info(`Supply a stack id (${stacks.stackArtifacts.map((s) => chalk.green(s.hierarchicalId)).join(', ')}) to display its template.`);
     }
 
-    return new CachedCloudAssembly(assembly);
+    return new CachedCloudAssembly(assembly.take());
   }
 
   /**
