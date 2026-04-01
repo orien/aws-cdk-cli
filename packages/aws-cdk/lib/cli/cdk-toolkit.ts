@@ -2,7 +2,7 @@ import * as path from 'path';
 import { format } from 'util';
 import * as cxapi from '@aws-cdk/cloud-assembly-api';
 import { RequireApproval } from '@aws-cdk/cloud-assembly-schema';
-import type { ConfirmationRequest, DeploymentMethod, ToolkitAction, ToolkitOptions } from '@aws-cdk/toolkit-lib';
+import type { ConfirmationRequest, DeploymentMethod, PublishAssetsOptions, ToolkitAction, ToolkitOptions } from '@aws-cdk/toolkit-lib';
 import { PermissionChangeType, Toolkit, ToolkitError } from '@aws-cdk/toolkit-lib';
 import * as chalk from 'chalk';
 import * as chokidar from 'chokidar';
@@ -206,7 +206,7 @@ export class CdkToolkit {
       emojis: true,
       ioHost: this.ioHost,
       toolkitStackName: this.toolkitStackName,
-      unstableFeatures: ['refactor', 'flags'],
+      unstableFeatures: ['refactor', 'flags', 'publish-assets'],
     });
   }
 
@@ -809,6 +809,10 @@ export class CdkToolkit {
     if (!anyRollbackable) {
       throw new ToolkitError('NoRollbackableStacks', 'No stacks were in a state that could be rolled back');
     }
+  }
+
+  public async publishAssets(options: PublishAssetsOptions): Promise<void> {
+    await this.toolkit.publishAssets(this.props.cloudExecutable, options);
   }
 
   public async watch(options: WatchOptions) {

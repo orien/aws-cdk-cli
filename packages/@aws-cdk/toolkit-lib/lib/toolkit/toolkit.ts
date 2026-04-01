@@ -46,6 +46,7 @@ import type { DiffOptions } from '../actions/diff';
 import { appendObject, prepareDiff } from '../actions/diff/private';
 import type { DriftOptions, DriftResult } from '../actions/drift';
 import { type ListOptions } from '../actions/list';
+import type { PublishAssetsOptions, PublishAssetsResult } from '../actions/publish-assets';
 import type { RefactorOptions } from '../actions/refactor';
 import { type RollbackOptions } from '../actions/rollback';
 import { type SynthOptions } from '../actions/synth';
@@ -164,7 +165,7 @@ export interface ToolkitOptions {
  * Names of toolkit features that are still under development, and may change in
  * the future.
  */
-export type UnstableFeature = 'refactor' | 'flags';
+export type UnstableFeature = 'refactor' | 'flags' | 'publish-assets';
 
 /**
  * The AWS CDK Programmatic Toolkit
@@ -493,6 +494,80 @@ export class Toolkit extends CloudAssemblySourceBuilder {
   }
 
   /**
+   * Publish Assets Action
+   *
+   * Publishes assets for the selected stacks without deploying
+   */
+  public async publishAssets(cx: ICloudAssemblySource, options: PublishAssetsOptions = {}): Promise<PublishAssetsResult> {
+    this.requireUnstableFeature('publish-assets');
+
+    const ioHelper = asIoHelper(this.ioHost, 'publish-assets');
+    const selectStacks = stacksOpt(options);
+    await using assembly = await synthAndMeasure(ioHelper, cx, selectStacks);
+
+    const stackCollection = await assembly.selectStacksV2(selectStacks);
+    await this.validateStacksMetadata(stackCollection, ioHelper);
+
+    if (stackCollection.stackCount === 0) {
+      await ioHelper.notify(IO.CDK_TOOLKIT_E5001.msg('No stacks selected'));
+      return {
+        publishedAssets: [],
+      };
+    }
+
+    const deployments = await this.deploymentsForAction('publish-assets');
+
+    const stacks = stackCollection.stackArtifacts;
+    const stacksAndTheirAssetManifests = stacks.flatMap((stack) => [
+      stack,
+      ...stack.dependencies.filter(x => cxapi.AssetManifestArtifact.isAssetManifestArtifact(x)),
+    ]);
+
+    const workGraph = new WorkGraphBuilder(
+      ioHelper,
+      true, // prebuild all assets
+    ).build(stacksAndTheirAssetManifests);
+
+    if (!options.force) {
+      await removePublishedAssetsFromWorkGraph(workGraph, deployments, options);
+    }
+
+    const assetNodes = Object.values(workGraph.nodes)
+      .filter((n): n is AssetPublishNode => n.type === 'asset-publish');
+
+    if (assetNodes.length === 0) {
+      await ioHelper.notify(IO.CDK_TOOLKIT_I9400.msg(chalk.green('\n✨  All assets are already published\n')));
+      return {
+        publishedAssets: [],
+      };
+    }
+
+    const assets = assetNodes.map(n => n.asset);
+    await ioHelper.notify(IO.CDK_TOOLKIT_I9401.msg('Publishing assets', { assets }));
+
+    const concurrency = options.concurrency ?? 4;
+    const graphConcurrency: Concurrency = {
+      'stack': 1,
+      'asset-build': concurrency,
+      'asset-publish': concurrency,
+    };
+
+    await workGraph.doParallel(graphConcurrency, {
+      deployStack: async () => {
+        // No-op: we're only publishing assets, not deploying
+      },
+      buildAsset: this.createBuildAssetFunction(ioHelper, deployments, undefined),
+      publishAsset: this.createPublishAssetFunction(ioHelper, deployments, undefined, options.force),
+    });
+
+    await ioHelper.notify(IO.CDK_TOOLKIT_I9402.msg(chalk.green('\n✨  Assets published successfully\n'), { assets }));
+
+    return {
+      publishedAssets: assets,
+    };
+  }
+
+  /**
    * List Action
    *
    * List selected stacks and their dependencies
@@ -557,36 +632,6 @@ export class Toolkit extends CloudAssemblySourceBuilder {
     const stacks = stackCollection.stackArtifacts;
     const stackOutputs: { [key: string]: any } = {};
     const outputsFile = options.outputsFile;
-
-    const buildAsset = async (assetNode: AssetBuildNode) => {
-      const buildAssetSpan = await ioHelper.span(SPAN.BUILD_ASSET).begin({
-        asset: assetNode.asset,
-      });
-      await deployments.buildSingleAsset(
-        assetNode.assetManifestArtifact,
-        assetNode.assetManifest,
-        assetNode.asset,
-        {
-          stack: assetNode.parentStack,
-          roleArn: options.roleArn,
-          stackName: assetNode.parentStack.stackName,
-        },
-      );
-      await buildAssetSpan.end();
-    };
-
-    const publishAsset = async (assetNode: AssetPublishNode) => {
-      const publishAssetSpan = await ioHelper.span(SPAN.PUBLISH_ASSET).begin({
-        asset: assetNode.asset,
-      });
-      await deployments.publishSingleAsset(assetNode.assetManifest, assetNode.asset, {
-        stack: assetNode.parentStack,
-        roleArn: options.roleArn,
-        stackName: assetNode.parentStack.stackName,
-        forcePublish: options.forceAssetPublishing,
-      });
-      await publishAssetSpan.end();
-    };
 
     const deployStack = async (stackNode: StackNode) => {
       const stack = stackNode.stack;
@@ -850,8 +895,8 @@ export class Toolkit extends CloudAssemblySourceBuilder {
 
     await workGraph.doParallel(graphConcurrency, {
       deployStack,
-      buildAsset,
-      publishAsset,
+      buildAsset: this.createBuildAssetFunction(ioHelper, deployments, options.roleArn),
+      publishAsset: this.createPublishAssetFunction(ioHelper, deployments, options.roleArn, options.forceAssetPublishing),
     });
 
     return ret;
@@ -1426,6 +1471,55 @@ export class Toolkit extends CloudAssemblySourceBuilder {
     if (!this.unstableFeatures.includes(requestedFeature)) {
       throw new ToolkitError('UnstableFeatureNotEnabled', `Unstable feature '${requestedFeature}' is not enabled. Please enable it under 'unstableFeatures'`);
     }
+  }
+
+  /**
+   * Create a buildAsset function for use in WorkGraph
+   */
+  private createBuildAssetFunction(
+    ioHelper: IoHelper,
+    deployments: Deployments,
+    roleArn: string | undefined,
+  ) {
+    return async (assetNode: AssetBuildNode) => {
+      const buildAssetSpan = await ioHelper.span(SPAN.BUILD_ASSET).begin({
+        asset: assetNode.asset,
+      });
+      await deployments.buildSingleAsset(
+        assetNode.assetManifestArtifact,
+        assetNode.assetManifest,
+        assetNode.asset,
+        {
+          stack: assetNode.parentStack,
+          roleArn,
+          stackName: assetNode.parentStack.stackName,
+        },
+      );
+      await buildAssetSpan.end();
+    };
+  }
+
+  /**
+   * Create a publishAsset function for use in WorkGraph
+   */
+  private createPublishAssetFunction(
+    ioHelper: IoHelper,
+    deployments: Deployments,
+    roleArn: string | undefined,
+    forcePublish?: boolean,
+  ) {
+    return async (assetNode: AssetPublishNode) => {
+      const publishAssetSpan = await ioHelper.span(SPAN.PUBLISH_ASSET).begin({
+        asset: assetNode.asset,
+      });
+      await deployments.publishSingleAsset(assetNode.assetManifest, assetNode.asset, {
+        stack: assetNode.parentStack,
+        roleArn,
+        stackName: assetNode.parentStack.stackName,
+        forcePublish,
+      });
+      await publishAssetSpan.end();
+    };
   }
 }
 
