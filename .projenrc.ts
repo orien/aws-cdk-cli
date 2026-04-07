@@ -592,8 +592,8 @@ const yarnCling = configureProject(
     name: '@aws-cdk/yarn-cling',
     description: 'Tool for generating npm-shrinkwrap from yarn.lock',
     srcdir: 'lib',
-    deps: ['@yarnpkg/lockfile', 'semver'],
-    devDeps: ['@types/semver', '@types/yarnpkg__lockfile', 'fast-check'],
+    deps: ['@yarnpkg/parsers', 'semver'],
+    devDeps: ['@types/semver', 'fast-check'],
     minNodeVersion: '18',
     tsconfig: {
       compilerOptions: {
@@ -610,6 +610,7 @@ const yarnCling = configureProject(
   }),
 );
 yarnCling.testTask.prependExec('ln -sf ../../cdk test/test-fixture/jsii/node_modules/');
+yarnCling.testTask.prependExec('ln -sf ../../cdk test/test-fixture-berry/jsii/node_modules/');
 
 // #endregion
 //////////////////////////////////////////////////////////////////////
