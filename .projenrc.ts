@@ -236,6 +236,10 @@ const repoProject = new yarn.Monorepo({
     '@aws-sdk/credential-providers',
     '@aws-sdk/lib-storage',
     'tsx',
+    'jest',
+    '@types/jest',
+    'eslint-config-prettier',
+    'eslint-plugin-prettier',
   ],
   vscodeWorkspace: true,
   vscodeWorkspaceOptions: {
@@ -246,7 +250,6 @@ const repoProject = new yarn.Monorepo({
   yarnBerry: true,
   consistentVersions: [
     'typescript',
-    // '@types/node', // @todo
     'eslint',
     'eslint-import-resolver-typescript',
     'eslint-plugin-import',
@@ -257,10 +260,11 @@ const repoProject = new yarn.Monorepo({
     '@typescript-eslint/eslint-plugin',
     '@typescript-eslint/parser',
     'prettier',
-    // 'eslint-config-prettier', // @todo
-    // 'eslint-plugin-prettier', // @todo
-    // 'jest', // @todo
+    'eslint-config-prettier',
+    'eslint-plugin-prettier',
+    'jest',
     'jest-junit',
+    '@types/jest',
   ],
 
   eslintOptions: {
@@ -694,7 +698,6 @@ const cdkAssetsLib = configureProject(
     srcdir: 'lib',
     deps: [
       cloudAssemblySchema.customizeReference({ versionType: 'any-future' }),
-      cxApi,
       cloudAssemblyApi.customizeReference({ versionType: 'exact' }),
       'archiver',
       'fast-glob',
@@ -713,7 +716,7 @@ const cdkAssetsLib = configureProject(
       '@types/archiver',
       '@types/mime@^2',
       '@types/picomatch',
-      'fs-extra',
+      'fs-extra@^11',
       'graceful-fs',
       'jszip',
       '@types/mock-fs@^4',
@@ -913,7 +916,7 @@ const toolkitLib = configureProject(
       'chalk@^4',
       'chokidar@^4',
       'fast-deep-equal',
-      'fs-extra@^9',
+      'fs-extra@^11',
       'picomatch',
       'p-limit@^3',
       'semver',
@@ -930,7 +933,7 @@ const toolkitLib = configureProject(
       '@jest/types',
       '@microsoft/api-extractor',
       '@smithy/util-stream',
-      '@types/fs-extra',
+      '@types/fs-extra@^11',
       '@types/picomatch',
       '@types/split2',
       'aws-cdk-lib',
@@ -1183,7 +1186,7 @@ const cli = configureProject(
       yargsGen,
       cliPluginContract,
       '@types/archiver',
-      '@types/fs-extra@^9',
+      '@types/fs-extra@^11',
       '@types/mockery',
       '@types/picomatch',
       '@types/promptly',
@@ -1200,7 +1203,7 @@ const cli = configureProject(
       'nock@13',
       'sinon',
       'ts-mock-imports',
-      'ts-node',
+      'tsx',
     ],
     deps: [
       cloudAssemblySchema.customizeReference({ versionType: 'any-future' }),
@@ -1245,7 +1248,7 @@ const cli = configureProject(
       'chokidar@^4',
       'decamelize@^5', // Non-ESM
       'enquirer',
-      'fs-extra@^9',
+      'fs-extra@^11',
       'fast-glob',
       'picomatch',
       'p-limit@^3',
@@ -1383,7 +1386,7 @@ cli.gitignore.addPatterns('build-info.json');
 const cliPackageJson = `${cli.workspaceDirectory}/package.json`;
 
 cli.preCompileTask.prependExec('./generate.sh');
-cli.preCompileTask.prependExec('ts-node -P tsconfig.dev.json scripts/user-input-gen.ts');
+cli.preCompileTask.prependExec('tsx --tsconfig tsconfig.dev.json scripts/user-input-gen.ts');
 
 const includeCliResourcesCommands = [
   'cp $(node -p \'require.resolve("cdk-from-cfn/index_bg.wasm")\') ./lib/',
@@ -1449,7 +1452,6 @@ const integRunner = configureProject(
     srcdir: 'lib',
     deps: [
       cloudAssemblySchema.customizeReference({ versionType: 'any-future' }),
-      cxApi,
       cloudAssemblyApi.customizeReference({ versionType: 'exact' }),
       cli.customizeReference({ versionType: 'exact' }),
       cdkAssetsLib.customizeReference({ versionType: 'exact' }),
@@ -1458,7 +1460,7 @@ const integRunner = configureProject(
       'workerpool@^6',
       'chokidar@^4',
       'chalk@^4',
-      'fs-extra@^9',
+      'fs-extra@^11',
       'yargs@^16',
       'proxy-agent',
       '@aws-cdk/aws-service-spec',
@@ -1466,7 +1468,7 @@ const integRunner = configureProject(
     ],
     devDeps: [
       'aws-cdk-lib',
-      '@types/fs-extra',
+      '@types/fs-extra@^11',
       '@types/mock-fs@^4',
       'mock-fs@^5',
       '@types/workerpool@^6',
@@ -1568,7 +1570,7 @@ const cliInteg = configureProject(
       '@smithy/util-retry', // smithy packages don't have the same major version as SDK packages
       '@smithy/types', // smithy packages don't have the same major version as SDK packages
       'chalk@^4',
-      'fs-extra@^9',
+      'fs-extra@^11',
       'fast-glob',
       'make-runnable@^1',
       'mockttp@^3',
@@ -1591,7 +1593,7 @@ const cliInteg = configureProject(
       toolkitLib.customizeReference({ versionType: 'exact' }),
       '@types/semver@^7',
       '@types/yargs@^16',
-      '@types/fs-extra@^9',
+      '@types/fs-extra@^11',
     ],
     bin: {
       'run-suite': 'bin/run-suite',
@@ -1661,7 +1663,9 @@ new pj.YamlFile(repo, '.github/dependabot.yml', {
       {
         'package-ecosystem': 'npm',
         'schedule': { interval: 'weekly' },
-        'cooldown': dependabotCooldown,
+        'cooldown': {
+          'default-days': dependabotCooldown,
+        },
         'labels': ['auto-approve'],
         'allow': [{
           'dependency-type': 'production',
@@ -1676,7 +1680,9 @@ new pj.YamlFile(repo, '.github/dependabot.yml', {
         'package-ecosystem': pkgEco,
         'directory': '/packages/aws-cdk/lib/init-templates',
         'schedule': { interval: 'weekly' },
-        'cooldown': dependabotCooldown,
+        'cooldown': {
+          'default-days': dependabotCooldown,
+        },
         'labels': ['auto-approve'],
         'open-pull-requests-limit': 5,
       })),
@@ -1771,6 +1777,9 @@ repoProject.github?.tryFindWorkflow('pull-request-lint')?.file?.patch(
       .map(n => n.split('/').pop()),
   ].filter(s => s && !disallowed.has(s)).sort().join('\n')),
 );
+
+// enforce same node types everywhere
+[repo, ...repo.subprojects].forEach(p => p.addDevDeps('@types/node@^20'));
 
 repo.synth();
 
