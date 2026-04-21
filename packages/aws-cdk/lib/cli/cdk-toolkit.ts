@@ -555,7 +555,10 @@ export class CdkToolkit {
         })
         : undefined;
 
-      if (requireApproval !== RequireApproval.NEVER) {
+      // Also skip the approval flow when the prepared change set is a no-op —
+      // there is nothing for the user to approve. Outputs, stack ARN, and
+      // timings are still emitted via the normal no-op deploy path below.
+      if (requireApproval !== RequireApproval.NEVER && !prepareResult?.noOp) {
         const currentTemplate = await this.props.deployments.readCurrentTemplate(stack);
         const formatter = new DiffFormatter({
           templateInfo: {
