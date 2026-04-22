@@ -23,6 +23,7 @@ import {
   waitForChangeSet,
   waitForStackDeploy,
   waitForStackDelete,
+  waitForChangeSetGone,
 } from './cfn-api';
 import { determineAllowCrossAccountAssetPublishing } from './checks';
 import type { DeployStackResult, SuccessfulDeployStackResult } from './deployment-result';
@@ -595,6 +596,9 @@ class FullCloudFormationDeployment {
         StackName: this.stackName,
         ChangeSetName: changeSetName,
       });
+
+      // Deleting may take a bit, especially if it involves nested stack change sets. Wait until it is gone.
+      await waitForChangeSetGone(this.cfn, this.ioHelper, this.stackName, changeSetName);
     }
   }
 
