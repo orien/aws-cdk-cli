@@ -135,6 +135,11 @@ export interface UserInput {
   readonly doctor?: {};
 
   /**
+   * Detach resources from a CloudFormation stack without deleting them
+   */
+  readonly orphan?: OrphanOptions;
+
+  /**
    * Moves resources between stacks or within the same stack
    */
   readonly refactor?: RefactorOptions;
@@ -1110,6 +1115,13 @@ export interface ImportOptions {
   readonly resourceMapping?: string;
 
   /**
+   * Inline JSON resource mapping, e.g. '{"MyResource":{"TableName":"my-table"}}'
+   *
+   * @default - undefined
+   */
+  readonly resourceMappingInline?: string;
+
+  /**
    * Positional argument for import
    */
   readonly STACK?: string;
@@ -1651,6 +1663,18 @@ export interface DocsOptions {
    * @default - undefined
    */
   readonly browser?: string;
+}
+
+/**
+ * Detach resources from a CloudFormation stack without deleting them
+ *
+ * @struct
+ */
+export interface OrphanOptions {
+  /**
+   * Positional argument for orphan
+   */
+  readonly PATHS?: Array<string>;
 }
 
 /**

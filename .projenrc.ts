@@ -1559,6 +1559,7 @@ const cliInteg = configureProject(
       '@octokit/rest@^20', // newer versions are ESM only
       sdkDep('@aws-sdk/client-codeartifact'),
       sdkDep('@aws-sdk/client-cloudformation'),
+      sdkDep('@aws-sdk/client-dynamodb'),
       sdkDep('@aws-sdk/client-ecr'),
       sdkDep('@aws-sdk/client-ecr-public'),
       sdkDep('@aws-sdk/client-ecs'),

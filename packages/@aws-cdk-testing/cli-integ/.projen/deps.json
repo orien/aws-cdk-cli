@@ -140,6 +140,11 @@
       "type": "runtime"
     },
     {
+      "name": "@aws-sdk/client-dynamodb",
+      "version": "^3",
+      "type": "runtime"
+    },
+    {
       "name": "@aws-sdk/client-ecr-public",
       "version": "^3",
       "type": "runtime"

@@ -71,6 +71,7 @@
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3",
     "@aws-sdk/client-codeartifact": "^3",
+    "@aws-sdk/client-dynamodb": "^3",
     "@aws-sdk/client-ecr": "^3",
     "@aws-sdk/client-ecr-public": "^3",
     "@aws-sdk/client-ecs": "^3",

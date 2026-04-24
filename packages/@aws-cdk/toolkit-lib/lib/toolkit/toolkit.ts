@@ -50,11 +50,13 @@ import type { DiffOptions } from '../actions/diff';
 import { appendObject, prepareDiff } from '../actions/diff/private';
 import type { DriftOptions, DriftResult } from '../actions/drift';
 import { type ListOptions } from '../actions/list';
+import type { OrphanOptions } from '../actions/orphan';
 import type { PublishAssetsOptions, PublishAssetsResult } from '../actions/publish-assets';
 import type { RefactorOptions } from '../actions/refactor';
 import { type RollbackOptions } from '../actions/rollback';
 import { type SynthOptions } from '../actions/synth';
 import type { IWatcher, WatchOptions } from '../actions/watch';
+import { countAssemblyResults } from './private/count-assembly-results';
 import { WATCH_EXCLUDE_DEFAULTS } from '../actions/watch/private';
 import {
   BaseCredentials,
@@ -80,6 +82,8 @@ import type { IIoHost, IoMessageLevel, ToolkitAction } from '../api/io';
 import type { ElapsedTime, IoHelper } from '../api/io/private';
 import { asIoHelper, IO, SPAN, withoutColor, withoutEmojis, withTrimmedWhitespace } from '../api/io/private';
 import { CloudWatchLogEventMonitor, findCloudWatchLogGroups } from '../api/logs-monitor';
+import { ResourceOrphaner } from '../api/orphan/orphaner';
+import { parseAndValidateConstructPaths } from '../api/orphan/private/helpers';
 import { Mode, PluginHost } from '../api/plugin';
 import {
   formatAmbiguousMappings,
@@ -102,7 +106,6 @@ import { formatErrorMessage, formatTime, obscureTemplate, serializeStructure, va
 import { pLimit } from '../util/concurrency';
 import { createIgnoreMatcher } from '../util/glob-matcher';
 import { promiseWithResolvers } from '../util/promises';
-import { countAssemblyResults } from './private/count-assembly-results';
 
 export interface ToolkitOptions {
   /**
@@ -169,7 +172,7 @@ export interface ToolkitOptions {
  * Names of toolkit features that are still under development, and may change in
  * the future.
  */
-export type UnstableFeature = 'refactor' | 'flags' | 'publish-assets';
+export type UnstableFeature = 'refactor' | 'orphan' | 'flags' | 'publish-assets';
 
 /**
  * The AWS CDK Programmatic Toolkit
@@ -1151,6 +1154,72 @@ export class Toolkit extends CloudAssemblySourceBuilder {
     }
 
     return ret;
+  }
+
+  /**
+   * Orphan Action. Detaches resources from a CloudFormation stack without deleting them.
+   */
+  public async orphan(cx: ICloudAssemblySource, options: OrphanOptions): Promise<void> {
+    this.requireUnstableFeature('orphan');
+
+    const ioHelper = asIoHelper(this.ioHost, 'orphan');
+
+    // Parse construct paths into stack construct ID + construct-level paths.
+    const parsed = parseAndValidateConstructPaths(options.constructPaths);
+
+    // Synth all stacks, then find the one whose hierarchicalId matches the stack construct ID.
+    await using assembly = await synthAndMeasure(ioHelper, cx, ALL_STACKS);
+    const allStacks = await assembly.selectStacksV2(ALL_STACKS);
+    const stack = allStacks.stackArtifacts.find(s => s.hierarchicalId === parsed.stackId);
+
+    if (!stack) {
+      throw new ToolkitError(
+        'StackNotFound',
+        `No stack found with construct ID '${parsed.stackId}'. Available stacks: ${allStacks.stackArtifacts.map(s => s.hierarchicalId).join(', ')}`,
+      );
+    }
+    const deployments = await this.deploymentsForAction('orphan');
+
+    const orphaner = new ResourceOrphaner({
+      deployments,
+      ioHelper,
+      roleArn: options.roleArn,
+      toolkitStackName: options.toolkitStackName ?? this.toolkitStackName,
+    });
+
+    const plan = await orphaner.makePlan(stack, parsed.constructPaths);
+
+    // Show the plan
+    const resourceLines = plan.orphanedResources
+      .map((r) => `  ${r.logicalId} (${r.resourceType}) - ${r.cdkPath}`)
+      .join('\n');
+    await ioHelper.defaults.info(
+      `Stack: ${plan.stackName}\n` +
+      `Resources to orphan (${plan.orphanedResources.length}):\n` +
+      resourceLines,
+    );
+
+    // Confirm before orphaning
+    const confirmed = await ioHelper.requestResponse(IO.CDK_TOOLKIT_I8810.req(
+      'Do you wish to orphan these resources? This will perform 3 CloudFormation deployments.', {
+        motivation: 'User confirmation is needed before orphaning resources',
+      }));
+    if (!confirmed) {
+      throw new ToolkitError('OrphanAborted', 'Aborted by user');
+    }
+
+    const result = await plan.execute();
+
+    // Output next steps
+    const mappingJson = Object.keys(result.resourceMapping).length > 0
+      ? ` --resource-mapping-inline '${JSON.stringify(result.resourceMapping)}'`
+      : '';
+    await ioHelper.defaults.info(
+      `✅ Resources orphaned from ${plan.stackName}\n\n` +
+      'Next steps:\n' +
+      '  1. Update your CDK code to use the new resource type\n' +
+      `  2. cdk import${mappingJson}`,
+    );
   }
 
   /**
