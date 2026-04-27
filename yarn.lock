@@ -321,7 +321,7 @@ __metadata:
     chalk: "npm:^4"
     commit-and-tag-version: "npm:^12"
     constructs: "npm:^10.0.0"
-    diff: "npm:^8.0.4"
+    diff: "npm:^9.0.0"
     eslint: "npm:^9"
     eslint-config-prettier: "npm:^10.1.8"
     eslint-import-resolver-typescript: "npm:^4.4.4"
@@ -347,14 +347,14 @@ __metadata:
   linkType: soft
 
 "@aws-cdk/cx-api@npm:^2":
-  version: 2.248.0
-  resolution: "@aws-cdk/cx-api@npm:2.248.0"
+  version: 2.251.0
+  resolution: "@aws-cdk/cx-api@npm:2.251.0"
   dependencies:
-    "@aws-cdk/cloud-assembly-api": "npm:^2.2.0"
+    "@aws-cdk/cloud-assembly-api": "npm:^2.2.2"
     semver: "npm:^7.7.4"
   peerDependencies:
-    "@aws-cdk/cloud-assembly-schema": ">=53.0.0"
-  checksum: 10c0/bb7ef41d19547ceb226912d2f99db020db58639322e03edeb1835424279ff650291a2a7a3b357ab60524f959cff22f049ce20c76f548f45049fa8e2f41028a33
+    "@aws-cdk/cloud-assembly-schema": ">=53.18.0"
+  checksum: 10c0/480af47d19353bb6f5d52e1ea1e8f6179fed7039ff614f05a6c4f57668c054a00332cb5d02ecf39f7847140f41ecae69db594c4afce9749949f9fafdd79684fa
   languageName: node
   linkType: hard
 
@@ -9526,10 +9526,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"diff@npm:^8.0.2, diff@npm:^8.0.4, diff@npm:~8.0.2":
+"diff@npm:^8.0.2, diff@npm:~8.0.2":
   version: 8.0.4
   resolution: "diff@npm:8.0.4"
   checksum: 10c0/7ee5d03926db4039be7252ac3b0abaae1bd122a2ca971e5ca7270e444e36ff83dd906fad1a719740ca347e97ed5dc8f458a76a8391dbcd7aff363bdafb348a00
+  languageName: node
+  linkType: hard
+
+"diff@npm:^9.0.0":
+  version: 9.0.0
+  resolution: "diff@npm:9.0.0"
+  checksum: 10c0/a971cc88f66071a33bd3942db2f51b57d484e9856265ae45cf44fb28ab2fde91f132d9c26d8be0fb6082d2be94d29e1295c1adb251b7461935d6a2dd304cd161
   languageName: node
   linkType: hard
 
