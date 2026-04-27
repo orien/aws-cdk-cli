@@ -14,8 +14,9 @@ integTest(
       },
     });
 
-    // Assert there are no changes
+    // Assert no visible changes, but hint indicates hidden metadata changes
     expect(diff).toContain('There were no differences');
+    expect(diff).toContain('CDK metadata changes were hidden, run cdk diff --strict to show');
   }),
 );
 
