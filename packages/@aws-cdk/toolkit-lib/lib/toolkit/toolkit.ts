@@ -39,6 +39,7 @@ import { AssetBuildTime, type DeployOptions } from '../actions/deploy';
 import {
   buildParameterMap,
   isChangeSetDeployment,
+  isExecuteChangeSetDeployment,
   isExecutingChangeSetDeployment,
   isNonExecutingChangeSetDeployment,
   type PrivateDeployOptions,
@@ -99,7 +100,7 @@ import { ResourceMigrator } from '../api/resource-import';
 import { tagsForStack } from '../api/tags/private';
 import { DEFAULT_TOOLKIT_STACK_NAME } from '../api/toolkit-info';
 import type { AssetBuildNode, AssetPublishNode, Concurrency, StackNode } from '../api/work-graph';
-import { WorkGraphBuilder, buildDestroyWorkGraph } from '../api/work-graph';
+import { WorkGraph, WorkGraphBuilder, buildDestroyWorkGraph } from '../api/work-graph';
 import type { AssemblyData, RefactorResult, StackDetails, SuccessfulDeployStackResult } from '../payloads';
 import { PermissionChangeType } from '../payloads';
 import { formatErrorMessage, formatTime, obscureTemplate, serializeStructure, validateSnsTopicArn } from '../util';
@@ -560,9 +561,8 @@ export class Toolkit extends CloudAssemblySourceBuilder {
     };
 
     await workGraph.doParallel(graphConcurrency, {
-      deployStack: async () => {
-        // No-op: we're only publishing assets, not deploying
-      },
+      // No-op: we're only publishing assets, not deploying
+      deployStack: WorkGraph.NOOP,
       buildAsset: this.createBuildAssetFunction(ioHelper, deployments, undefined),
       publishAsset: this.createPublishAssetFunction(ioHelper, deployments, undefined, options.force),
     });
@@ -623,9 +623,11 @@ export class Toolkit extends CloudAssemblySourceBuilder {
     }
 
     const deployments = await this.deploymentsForAction('deploy');
-    const migrator = new ResourceMigrator({ deployments, ioHelper });
 
-    await migrator.tryMigrateResources(stackCollection, options);
+    if (!isExecuteChangeSetDeployment(options.deploymentMethod)) {
+      const migrator = new ResourceMigrator({ deployments, ioHelper });
+      await migrator.tryMigrateResources(stackCollection, options);
+    }
 
     const parameterMap = buildParameterMap(options.parameters?.parameters);
 
@@ -639,6 +641,21 @@ export class Toolkit extends CloudAssemblySourceBuilder {
     const stacks = stackCollection.stackArtifacts;
     const stackOutputs: { [key: string]: any } = {};
     const outputsFile = options.outputsFile;
+
+    const { buildAsset, publishAsset } = (() => {
+      if (isExecuteChangeSetDeployment(options.deploymentMethod)) {
+        // No-op: assets are already published
+        return {
+          buildAsset: WorkGraph.NOOP,
+          publishAsset: WorkGraph.NOOP,
+        };
+      }
+
+      return {
+        buildAsset: this.createBuildAssetFunction(ioHelper, deployments, options.roleArn),
+        publishAsset: this.createPublishAssetFunction(ioHelper, deployments, options.roleArn, options.forceAssetPublishing),
+      };
+    })();
 
     const deployStack = async (stackNode: StackNode) => {
       const stack = stackNode.stack;
@@ -721,11 +738,16 @@ export class Toolkit extends CloudAssemblySourceBuilder {
       // changes — there is nothing for the user to approve. Outputs, stack ARN,
       // and timings are still emitted via the normal no-op deploy path below.
       if (!prepareResult?.noOp) {
+        // For execute-change-set, describe the existing change set so we can show an accurate diff
+        const diffChangeSet = isExecuteChangeSetDeployment(options.deploymentMethod)
+          ? await deployments.describeChangeSet(stack, options.deploymentMethod.changeSetName)
+          : prepareResult?.changeSet;
+
         const formatter = new DiffFormatter({
           templateInfo: {
             oldTemplate: currentTemplate,
             newTemplate: stack,
-            changeSet: prepareResult?.changeSet,
+            changeSet: diffChangeSet,
           },
         });
 
@@ -927,8 +949,8 @@ export class Toolkit extends CloudAssemblySourceBuilder {
 
     await workGraph.doParallel(graphConcurrency, {
       deployStack,
-      buildAsset: this.createBuildAssetFunction(ioHelper, deployments, options.roleArn),
-      publishAsset: this.createPublishAssetFunction(ioHelper, deployments, options.roleArn, options.forceAssetPublishing),
+      buildAsset,
+      publishAsset,
     });
 
     return ret;
